@@ -1,0 +1,19 @@
+{
+  "name": "staking_contract",
+  "version": "1.0.0",
+  "description": "staking contract for avs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RitaTcepeleva/AVS-staking.git"
+  },
+  "author": "Rita Tcepeleva",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/RitaTcepeleva/AVS-staking/issues"
+  },
+  "homepage": "https://github.com/RitaTcepeleva/AVS-staking#readme"
+}

@@ -1,0 +1,8 @@
+build/
+node_modules/
+.env
+*.svg
+*.png
+test.json
+output.sol
+bin/
