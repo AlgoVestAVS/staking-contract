@@ -15,5 +15,15 @@
   "bugs": {
     "url": "https://github.com/RitaTcepeleva/AVS-staking/issues"
   },
-  "homepage": "https://github.com/RitaTcepeleva/AVS-staking#readme"
+  "homepage": "https://github.com/RitaTcepeleva/AVS-staking#readme",
+  "devDependencies": {
+    "bn.js": "^4.11.9",
+    "dotenv": "^8.2.0",
+    "truffle-hdwallet-provider": "^1.0.17",
+    "truffle-plugin-verify": "^0.5.4",
+    "web3": "^1.2.1"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^3.4.0"
+  }
 }
