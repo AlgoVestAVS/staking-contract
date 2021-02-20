@@ -60,7 +60,7 @@ contract AVS_staking is Ownable
         uint256 day
     );
     StakeInfo[] public allStakes;
-    event sev_days(uint256 counter, uint256 day_week_ago, uint256 final_perc);
+    //event sev_days(uint256 counter, uint256 day_week_ago, uint256 final_perc);
     constructor (IERC20 _AVSAddress, uint256 _zeroDayStartTime, uint256 _dayDurationSec) public {
         avsAddress = _AVSAddress;
         zeroDayStartTime = _zeroDayStartTime;
@@ -200,8 +200,9 @@ contract AVS_staking is Ownable
             freezedAVSTokens = freezedAVSTokens.sub(st.freezedRewardAVSTokens);
             emit TokenUnfreezed(sender, st.freezedRewardAVSTokens, currDay);
             allAVSTokens = allAVSTokens.sub(avsTokensToReturn - st.stakedAVS);
-            avsAddress.transfer(sender, avsTokensToReturn);
-            emit AVSTokenOutcome(sender, avsTokensToReturn - st.stakedAVS, currDay);
+            //avsAddress.transfer(sender, avsTokensToReturn);
+            avsAddress.transfer(sender, st.stakedAVS.add((avsTokensToReturn.sub(st.stakedAVS)).mul(98).div(100)));
+            emit AVSTokenOutcome(sender, (avsTokensToReturn.sub(st.stakedAVS)).mul(98).div(100), currDay);
 
             emit StakeEnd(
                 sender,
@@ -347,7 +348,7 @@ contract AVS_staking is Ownable
             "StakingAVS: Wrong numOfDays"
         );
         uint256 num_of_parts = numOfDays.div(15);
-        uint256 perc = 10;
+        uint256 perc = 1000;
         //ufixed percent = perc.mul((104/100)**num_of_parts).mul(numOfDays).div(365);
         for (uint256 i=2; i<=num_of_parts; ++i){
             perc += perc.mul(10).div(100);
@@ -360,7 +361,7 @@ contract AVS_staking is Ownable
                     .div(daysInYear)
                     .div(DaysApyPercentsDenominator[day - 1]);
         }*/
-        return avsAmount + avsAmount.mul(perc).div(100).mul(uint256(numOfDays)).div(uint256(365));
+        return avsAmount + avsAmount.mul(perc).div(10000).mul(uint256(numOfDays)).div(uint256(365));
     }
 
     function _getAVSEarnings_pen(uint256 avsAmount, uint256 numOfDays) 
@@ -374,11 +375,11 @@ contract AVS_staking is Ownable
         );
         uint256 num_of_parts = numOfDays.div(15);
         //uint256 percent = 10*(1.04**num_of_parts)*numOfDays/365;
-        uint256 perc = 10;
+        uint256 perc = 1000;
         for (uint256 i=2; i<=num_of_parts; ++i){
             perc += perc.mul(10).div(100);
         }
-        uint256 rew = avsAmount.mul(perc).div(100).mul(uint256(numOfDays)).div(uint256(365));
+        uint256 rew = avsAmount.mul(perc).div(10000).mul(uint256(numOfDays)).div(uint256(365));
         //uint256 rew = avsAmount.mul(perc).div(100).mul(uint256(num_of_parts)).mul(15).div(uint256(365)); если надо будет поменять
         return avsAmount + rew*uint256(80)/uint256(100);
     }
@@ -432,7 +433,7 @@ contract AVS_staking is Ownable
         uint256 day_week_ago = 0;
         uint256 counter = 0;
         uint256 all_percents = 0;
-        uint256 step = allStakes.length - 1;
+        uint256 step = allStakes.length.sub(1);
         uint256 stake_day = allStakes[step].startDay;
         uint256 num_stake_days = allStakes[step].numDaysStake;
         if (day_now >=  days_in_week){
@@ -442,7 +443,7 @@ contract AVS_staking is Ownable
             uint256 num_of_parts = num_stake_days.div(15);
             uint256 perc = 1000;
             for (uint256 i=2; i<=num_of_parts; ++i){
-                perc += perc.mul(10).div(100);
+                perc = perc.add(perc.mul(10).div(100));
             }
             all_percents = all_percents.add(perc);
             counter = counter.add(1);
