@@ -1,18 +1,26 @@
 // SPDX-License-Identifier: MIT
 // File: node_modules@openzeppelin\contracts\token\ERC20\IERC20.sol
 // File: node_modules@openzeppelin\contracts\math\SafeMath.sol
-pragma solidity ^0.6.0;
+pragma solidity 0.6.12;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-contract AVS_staking is Ownable 
+contract AVS_staking is Ownable , ReentrancyGuard
 {
     using SafeMath for uint256;
     IERC20 public avsAddress;
     uint256 public zeroDayStartTime;
     uint256 public dayDurationSec;
+    uint256 public allAVSTokens;
+    uint256 public totalStakers;
+    uint256 public totalStakedAVS;
+    uint256 public unfreezedAVSTokens;
+    uint256 public freezedAVSTokens;
+    uint256 public stakeIdLast;
+    uint256 constant public MAX_NUM_DAYS = 180;
 
     modifier onlyWhenOpen
     {
@@ -23,18 +31,11 @@ contract AVS_staking is Ownable
         _;
     }
 
-    uint256 public allAVSTokens;
-    uint256 public totalStakers;
-    uint256 public totalStakedAVS;
-    uint256 public unfreezedAVSTokens;
-    uint256 public freezedAVSTokens;
     event AVSTokenIncome(address who, uint256 amount, uint256 day);
     event AVSTokenOutcome(address who, uint256 amount, uint256 day);
     event TokenFreezed(address who, uint256 amount, uint256 day);
     event TokenUnfreezed(address who, uint256 amount, uint256 day);
 
-    uint256 public stakeIdLast;
-    uint256 constant public maxNumDays = 180;
     struct StakeInfo
     {
         uint256 stakeId;
@@ -44,6 +45,7 @@ contract AVS_staking is Ownable
         uint256 freezedRewardAVSTokens;
     }
     mapping(address => StakeInfo[]) public stakeList;
+
     event StakeStart(
         address who,
         uint256 AVSIncome,
@@ -60,14 +62,21 @@ contract AVS_staking is Ownable
         uint256 day
     );
     StakeInfo[] public allStakes;
-    event sev_days(uint256 counter, uint256 day_week_ago, uint256 final_perc);
-    constructor (IERC20 _AVSAddress, uint256 _zeroDayStartTime, uint256 _dayDurationSec) public {
+    //WHITELIST
+    mapping(address => bool) whitelist;
+    event AddedToWhitelist(address indexed account);
+    event RemovedFromWhitelist(address indexed account);
+    /*modifier onlyWhitelisted() {
+        require(isWhitelisted(msg.sender));
+        _;
+    }*/
+    constructor (IERC20 _AVSAddress, uint256 _zeroDayStartTime, uint256 _dayDurationSec) ReentrancyGuard() public {
         avsAddress = _AVSAddress;
         zeroDayStartTime = _zeroDayStartTime;
         dayDurationSec = _dayDurationSec;
     }
 
-    function AVSTokenDonation(uint256 amount) external
+    function AlgoVestTokenDonation(uint256 amount) external nonReentrant
     {
         address sender = _msgSender();
         require(
@@ -79,7 +88,7 @@ contract AVS_staking is Ownable
         emit AVSTokenIncome(sender, amount, _currentDay());
     }
 
-    function AVSOwnerWithdraw(uint256 amount) external onlyOwner
+    function AlgoVestOwnerWithdraw(uint256 amount) external onlyOwner nonReentrant
     {
         address sender = _msgSender();
         require(
@@ -103,10 +112,10 @@ contract AVS_staking is Ownable
         emit AVSTokenOutcome(sender, amount, _currentDay());
     }
 
-    function stakeStart(uint256 amount, uint256 numDaysStake) external onlyWhenOpen
+    function stakeStart(uint256 amount, uint256 numDaysStake) external onlyWhenOpen nonReentrant
     {
         require(
-            numDaysStake > 0 && numDaysStake <= maxNumDays && numDaysStake%15 == 0,
+            numDaysStake > 0 && numDaysStake <= MAX_NUM_DAYS && numDaysStake%15 == 0,
             "StakingAVS: Wrong number of days"
         );
         address sender = _msgSender();
@@ -116,7 +125,7 @@ contract AVS_staking is Ownable
         );
         uint256 currDay = _currentDay();
         emit AVSTokenIncome(sender, amount, currDay);
-        uint256 avsEarnings = _getAVSEarnings(amount, numDaysStake);
+        uint256 avsEarnings = _getAlgoVestEarnings(amount, numDaysStake);
         // Freeze AVS tokens on contract
         require(
             unfreezedAVSTokens >= avsEarnings - amount,
@@ -149,7 +158,7 @@ contract AVS_staking is Ownable
         totalStakedAVS = totalStakedAVS.add(amount);
     }
 
-    function stakeEnd(uint256 stakeIndex, uint256 stakeId) external onlyWhenOpen
+    function stakeEnd(uint256 stakeIndex, uint256 stakeId) external onlyWhenOpen nonReentrant
     {
         address sender = _msgSender();
         require(
@@ -164,7 +173,7 @@ contract AVS_staking is Ownable
         uint256 currDay = _currentDay();
         uint256 servedNumOfDays = min(currDay - st.startDay,st.numDaysStake);
         if (servedNumOfDays < st.numDaysStake){
-            uint256 avsTokensToReturn = _getAVSEarnings_pen(st.stakedAVS, servedNumOfDays);
+            uint256 avsTokensToReturn = _getAlgoVestEarningsPenalty(st.stakedAVS, servedNumOfDays);
             require(
                 st.freezedRewardAVSTokens >= avsTokensToReturn - st.stakedAVS,
                 "StakingAVS: Internal error!"
@@ -190,7 +199,7 @@ contract AVS_staking is Ownable
             totalStakedAVS = totalStakedAVS.sub(st.stakedAVS);
         }
         else {
-            uint256 avsTokensToReturn = _getAVSEarnings(st.stakedAVS, st.numDaysStake);
+            uint256 avsTokensToReturn = _getAlgoVestEarnings(st.stakedAVS, st.numDaysStake);
             require(
                 st.freezedRewardAVSTokens >= avsTokensToReturn - st.stakedAVS,
                 "StakingAVS: Internal error!"
@@ -200,8 +209,17 @@ contract AVS_staking is Ownable
             freezedAVSTokens = freezedAVSTokens.sub(st.freezedRewardAVSTokens);
             emit TokenUnfreezed(sender, st.freezedRewardAVSTokens, currDay);
             allAVSTokens = allAVSTokens.sub(avsTokensToReturn - st.stakedAVS);
-            avsAddress.transfer(sender, avsTokensToReturn);
-            emit AVSTokenOutcome(sender, avsTokensToReturn - st.stakedAVS, currDay);
+            //avsAddress.transfer(sender, avsTokensToReturn);
+            if (isWhitelisted(sender)) {
+                avsAddress.transfer(sender, avsTokensToReturn);
+                emit AVSTokenOutcome(sender, avsTokensToReturn, currDay);
+            }
+            else {
+                avsAddress.transfer(sender, st.stakedAVS.add((avsTokensToReturn.sub(st.stakedAVS)).mul(98).div(100)));
+                emit AVSTokenOutcome(sender, (avsTokensToReturn.sub(st.stakedAVS)).mul(98).div(100), currDay);
+            }
+            //avsAddress.transfer(sender, st.stakedAVS.add((avsTokensToReturn.sub(st.stakedAVS)).mul(98).div(100)));
+            //emit AVSTokenOutcome(sender, (avsTokensToReturn.sub(st.stakedAVS)).mul(98).div(100), currDay);
 
             emit StakeEnd(
                 sender,
@@ -229,7 +247,6 @@ contract AVS_staking is Ownable
         allAVSTokens = allAVSTokens.sub(avsTokensToReturn);
         avsAddress.transfer(sender, avsTokensToReturn);
         emit AVSTokenOutcome(sender, avsTokensToReturn, currDay);
-
         emit StakeEnd(
             sender,
             st.stakeId,
@@ -320,7 +337,7 @@ contract AVS_staking is Ownable
             stakeList[who][stakeIndex].startDay,
             stakeList[who][stakeIndex].numDaysStake
         );
-        return _getAVSEarnings(stakeList[who][stakeIndex].stakedAVS, servedDays);
+        return _getAlgoVestEarnings(stakeList[who][stakeIndex].stakedAVS, servedDays);
     }
 
     function _getServedDays(
@@ -337,58 +354,51 @@ contract AVS_staking is Ownable
             servedDays = numDaysStake;
     }
 
-    function _getAVSEarnings(uint256 avsAmount, uint256 numOfDays) 
+    function _getAlgoVestEarnings(
+        uint256 avsAmount, 
+        uint256 numOfDays
+        ) 
         private
-        view
+        pure
         returns (uint256 reward)
     {
         require(
-            numOfDays >= 0 && numOfDays <= maxNumDays,
+            numOfDays >= 0 && numOfDays <= MAX_NUM_DAYS,
             "StakingAVS: Wrong numOfDays"
         );
         uint256 num_of_parts = numOfDays.div(15);
-        uint256 perc = 10;
-        //ufixed percent = perc.mul((104/100)**num_of_parts).mul(numOfDays).div(365);
+        uint256 perc = 1000;
         for (uint256 i=2; i<=num_of_parts; ++i){
             perc += perc.mul(10).div(100);
         }
-        /*for (uint256 day = 1; day <= numOfDays; ++day)
-        {
-            reward +=
-                avsAmount.add(reward)
-                    .mul(DaysApyPercentsNumerator[day - 1])
-                    .div(daysInYear)
-                    .div(DaysApyPercentsDenominator[day - 1]);
-        }*/
-        return avsAmount + avsAmount.mul(perc).div(100).mul(uint256(numOfDays)).div(uint256(365));
+        return avsAmount.add(avsAmount.mul(perc).mul(numOfDays).div(3650000));
     }
 
-    function _getAVSEarnings_pen(uint256 avsAmount, uint256 numOfDays) 
+    function _getAlgoVestEarningsPenalty(
+        uint256 avsAmount, 
+        uint256 numOfDays
+        ) 
         private
-        view
+        pure
         returns (uint256 reward)
     {
         require(
-            numOfDays >= 0 && numOfDays <= maxNumDays,
+            numOfDays >= 0 && numOfDays <= MAX_NUM_DAYS,
             "StakingAVS: Wrong numOfDays"
         );
         uint256 num_of_parts = numOfDays.div(15);
-        //uint256 percent = 10*(1.04**num_of_parts)*numOfDays/365;
-        uint256 perc = 10;
+        uint256 perc = 1000;
         for (uint256 i=2; i<=num_of_parts; ++i){
             perc += perc.mul(10).div(100);
         }
-        uint256 rew = avsAmount.mul(perc).div(100).mul(uint256(numOfDays)).div(uint256(365));
-        //uint256 rew = avsAmount.mul(perc).div(100).mul(uint256(num_of_parts)).mul(15).div(uint256(365)); если надо будет поменять
-        return avsAmount + rew*uint256(80)/uint256(100);
+        uint256 rew = avsAmount.mul(perc).mul(numOfDays).div(3650000);
+        return avsAmount.add(rew.mul(80).div(100));
     }
 
     function _currentDay() private view returns(uint256)
     {
         return now.sub(zeroDayStartTime).div(dayDurationSec);
     }
-
-
 
     function _removeStake(uint256 stakeIndex, uint256 stakeId) private
     {
@@ -408,7 +418,14 @@ contract AVS_staking is Ownable
         stakeList[sender].pop();
     }
 
-    function min (uint256 a, uint256 b) private view returns (uint256 minimum) {
+    function min (
+        uint256 a, 
+        uint256 b
+        ) 
+        private 
+        pure 
+        returns (uint256 minimum) 
+    {
         //uint256 minimum;
         if(a > b){
             minimum = b;
@@ -418,11 +435,11 @@ contract AVS_staking is Ownable
         }
         return minimum;
     }
-    function length_stakes() external view returns(uint256){
+    function lengthStakes() external view returns(uint256){
         return allStakes.length;
     }
 
-    function seven_days() external view returns(uint256)
+    function sevenDays() external view returns(uint256)
     {
         if (allStakes.length == 0){
             return 0;
@@ -432,7 +449,7 @@ contract AVS_staking is Ownable
         uint256 day_week_ago = 0;
         uint256 counter = 0;
         uint256 all_percents = 0;
-        uint256 step = allStakes.length - 1;
+        uint256 step = allStakes.length.sub(1);
         uint256 stake_day = allStakes[step].startDay;
         uint256 num_stake_days = allStakes[step].numDaysStake;
         if (day_now >=  days_in_week){
@@ -442,7 +459,7 @@ contract AVS_staking is Ownable
             uint256 num_of_parts = num_stake_days.div(15);
             uint256 perc = 1000;
             for (uint256 i=2; i<=num_of_parts; ++i){
-                perc += perc.mul(10).div(100);
+                perc = perc.add(perc.mul(10).div(100));
             }
             all_percents = all_percents.add(perc);
             counter = counter.add(1);
@@ -456,7 +473,29 @@ contract AVS_staking is Ownable
             num_stake_days = allStakes[step].numDaysStake;
         }
         uint256 final_percent = all_percents.div(counter);
-        //emit sev_days(counter, day_week_ago, final_percent);
         return final_percent;
     } 
+
+    function addInWhitelist(address _address) 
+    public 
+    onlyOwner 
+    {
+        whitelist[_address] = true;
+        emit AddedToWhitelist(_address);
+    }
+
+    function removeFromWhiteList(address _address) 
+    public 
+    onlyOwner 
+    {
+        whitelist[_address] = false;
+        emit RemovedFromWhitelist(_address);
+    }
+
+    function isWhitelisted(address _address) 
+    public view 
+    returns(bool) 
+    {
+        return whitelist[_address];
+    }
 }
