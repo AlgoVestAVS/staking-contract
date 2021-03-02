@@ -72,7 +72,7 @@ contract AVS_staking is Ownable , ReentrancyGuard
         dayDurationSec = _dayDurationSec;
     }
 
-    function AlgoVestTokenDonation(uint256 amount) external nonReentrant
+    function algoVestTokenDonation(uint256 amount) external nonReentrant
     {
         address sender = _msgSender();
         require(
@@ -84,7 +84,7 @@ contract AVS_staking is Ownable , ReentrancyGuard
         emit AVSTokenIncome(sender, amount, _currentDay());
     }
 
-    function AlgoVestOwnerWithdraw(uint256 amount) external onlyOwner nonReentrant
+    function algoVestOwnerWithdraw(uint256 amount) external onlyOwner nonReentrant
     {
         address sender = _msgSender();
         require(
