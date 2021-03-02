@@ -21,6 +21,19 @@ contract AVS_staking is Ownable , ReentrancyGuard
     uint256 public freezedAVSTokens;
     uint256 public stakeIdLast;
     uint256 constant public MAX_NUM_DAYS = 180;
+    StakeInfo[] public allStakes;
+
+    mapping(address => StakeInfo[]) public stakeList;
+    mapping(address => bool) whitelist;
+
+    struct StakeInfo
+    {
+        uint256 stakeId;
+        uint256 startDay;
+        uint256 numDaysStake;
+        uint256 stakedAVS;
+        uint256 freezedRewardAVSTokens;
+    }
 
     modifier onlyWhenOpen
     {
@@ -35,17 +48,6 @@ contract AVS_staking is Ownable , ReentrancyGuard
     event AVSTokenOutcome(address who, uint256 amount, uint256 day);
     event TokenFreezed(address who, uint256 amount, uint256 day);
     event TokenUnfreezed(address who, uint256 amount, uint256 day);
-
-    struct StakeInfo
-    {
-        uint256 stakeId;
-        uint256 startDay;
-        uint256 numDaysStake;
-        uint256 stakedAVS;
-        uint256 freezedRewardAVSTokens;
-    }
-    mapping(address => StakeInfo[]) public stakeList;
-
     event StakeStart(
         address who,
         uint256 AVSIncome,
@@ -61,15 +63,9 @@ contract AVS_staking is Ownable , ReentrancyGuard
         uint256 servedNumDays,
         uint256 day
     );
-    StakeInfo[] public allStakes;
-    //WHITELIST
-    mapping(address => bool) whitelist;
     event AddedToWhitelist(address indexed account);
     event RemovedFromWhitelist(address indexed account);
-    /*modifier onlyWhitelisted() {
-        require(isWhitelisted(msg.sender));
-        _;
-    }*/
+
     constructor (IERC20 _AVSAddress, uint256 _zeroDayStartTime, uint256 _dayDurationSec) ReentrancyGuard() public {
         avsAddress = _AVSAddress;
         zeroDayStartTime = _zeroDayStartTime;
@@ -234,27 +230,6 @@ contract AVS_staking is Ownable , ReentrancyGuard
             }
             totalStakedAVS = totalStakedAVS.sub(st.stakedAVS);
         }
-        /*uint256 avsTokensToReturn = _getAvsEarnings(st.stakedAVS, servedNumOfDays);
-        require(
-            st.freezedRewardAVSTokens >= avsTokensToReturn,
-            "StakingAVS: Internal error!"
-        );*/
-
-        /*uint256 remainingAVSTokens = st.freezedRewardAVSTokens.sub(avsTokensToReturn);
-        unfreezedAVSTokens = unfreezedAVSTokens.add(remainingAVSTokens);
-        freezedAVSTokens = freezedAVSTokens.sub(st.freezedRewardAVSTokens);
-        emit TokenUnfreezed(sender, st.freezedRewardAVSTokens, currDay);
-        allAVSTokens = allAVSTokens.sub(avsTokensToReturn);
-        avsAddress.transfer(sender, avsTokensToReturn);
-        emit AVSTokenOutcome(sender, avsTokensToReturn, currDay);
-        emit StakeEnd(
-            sender,
-            st.stakeId,
-            avsTokensToReturn,
-            servedNumOfDays,
-            currDay
-        );
-        _removeStake(stakeIndex, stakeId);*/
     }
     function stakeListCount(address who) external view returns(uint256)
     {
@@ -266,27 +241,46 @@ contract AVS_staking is Ownable , ReentrancyGuard
         return _currentDay();
     }
 
-    function getDayUnixTime(uint256 day) public view returns(uint256)
-    {
-        return zeroDayStartTime.add(day.mul(dayDurationSec));
+    function lengthStakes() external view returns(uint256){
+        return allStakes.length;
     }
 
-    /*function changeDaysApyPercents(
-        uint256 day,
-        uint256 numerator,
-        uint256 denominator
-    )
-        external
-        onlyOwner
+    function sevenDays() external view returns(uint256)
     {
-        require(
-            day > 0 && day <= maxNumDays,
-            "StakingAVS: Wrong day"
-        );
-        DaysApyPercentsNumerator[day.sub(1)] = numerator;
-        DaysApyPercentsDenominator[day.sub(1)] = denominator;
-        _testDaysApyPercents();
-    }*/
+        if (allStakes.length == 0){
+            return 0;
+        }
+        uint256 day_now = _currentDay();
+        uint256 days_in_week = 7;
+        uint256 day_week_ago = 0;
+        uint256 counter = 0;
+        uint256 all_percents = 0;
+        uint256 step = allStakes.length.sub(1);
+        uint256 stake_day = allStakes[step].startDay;
+        uint256 num_stake_days = allStakes[step].numDaysStake;
+        if (day_now >=  days_in_week){
+            day_week_ago = day_now - days_in_week;
+        }
+        while (stake_day >= day_week_ago && step >= 0){
+            uint256 num_of_parts = num_stake_days.div(15);
+            uint256 perc = 1000;
+            for (uint256 i=2; i<=num_of_parts; ++i){
+                perc = perc.add(perc.mul(10).div(100));
+            }
+            all_percents = all_percents.add(perc);
+            counter = counter.add(1);
+            if (step != 0) {
+                step = step.sub(1);
+            }
+            else {
+                break;
+            }
+            stake_day = allStakes[step].startDay;
+            num_stake_days = allStakes[step].numDaysStake;
+        }
+        uint256 final_percent = all_percents.div(counter);
+        return final_percent;
+    }
 
     function getEndDayOfStakeInUnixTime(
         address who,
@@ -340,6 +334,34 @@ contract AVS_staking is Ownable , ReentrancyGuard
         return _getAlgoVestEarnings(stakeList[who][stakeIndex].stakedAVS, servedDays);
     }
 
+    function getDayUnixTime(uint256 day) public view returns(uint256)
+    {
+        return zeroDayStartTime.add(day.mul(dayDurationSec));
+    }
+
+    function addInWhitelist(address _address) 
+    public 
+    onlyOwner 
+    {
+        whitelist[_address] = true;
+        emit AddedToWhitelist(_address);
+    }
+
+    function removeFromWhiteList(address _address) 
+    public 
+    onlyOwner 
+    {
+        whitelist[_address] = false;
+        emit RemovedFromWhitelist(_address);
+    }
+
+    function isWhitelisted(address _address) 
+    public view 
+    returns(bool) 
+    {
+        return whitelist[_address];
+    }
+
     function _getServedDays(
         uint256 currDay,
         uint256 startDay,
@@ -371,7 +393,8 @@ contract AVS_staking is Ownable , ReentrancyGuard
         for (uint256 i=2; i<=num_of_parts; ++i){
             perc += perc.mul(10).div(100);
         }
-        return avsAmount.add(avsAmount.mul(perc).mul(numOfDays).div(3650000));
+        uint256 rew = avsAmount.mul(perc).mul(numOfDays).div(3650000);
+        return avsAmount.add(rew);
     }
 
     function _getAlgoVestEarningsPenalty(
@@ -434,68 +457,5 @@ contract AVS_staking is Ownable , ReentrancyGuard
             minimum = a;
         }
         return minimum;
-    }
-    function lengthStakes() external view returns(uint256){
-        return allStakes.length;
-    }
-
-    function sevenDays() external view returns(uint256)
-    {
-        if (allStakes.length == 0){
-            return 0;
-        }
-        uint256 day_now = _currentDay();
-        uint256 days_in_week = 7;
-        uint256 day_week_ago = 0;
-        uint256 counter = 0;
-        uint256 all_percents = 0;
-        uint256 step = allStakes.length.sub(1);
-        uint256 stake_day = allStakes[step].startDay;
-        uint256 num_stake_days = allStakes[step].numDaysStake;
-        if (day_now >=  days_in_week){
-            day_week_ago = day_now - days_in_week;
-        }
-        while (stake_day >= day_week_ago && step >= 0){
-            uint256 num_of_parts = num_stake_days.div(15);
-            uint256 perc = 1000;
-            for (uint256 i=2; i<=num_of_parts; ++i){
-                perc = perc.add(perc.mul(10).div(100));
-            }
-            all_percents = all_percents.add(perc);
-            counter = counter.add(1);
-            if (step != 0) {
-                step = step.sub(1);
-            }
-            else {
-                break;
-            }
-            stake_day = allStakes[step].startDay;
-            num_stake_days = allStakes[step].numDaysStake;
-        }
-        uint256 final_percent = all_percents.div(counter);
-        return final_percent;
-    } 
-
-    function addInWhitelist(address _address) 
-    public 
-    onlyOwner 
-    {
-        whitelist[_address] = true;
-        emit AddedToWhitelist(_address);
-    }
-
-    function removeFromWhiteList(address _address) 
-    public 
-    onlyOwner 
-    {
-        whitelist[_address] = false;
-        emit RemovedFromWhitelist(_address);
-    }
-
-    function isWhitelisted(address _address) 
-    public view 
-    returns(bool) 
-    {
-        return whitelist[_address];
     }
 }
