@@ -168,8 +168,8 @@ contract AVS_staking is Ownable , ReentrancyGuard
         );
         uint256 currDay = _currentDay();
         uint256 servedNumOfDays = min(currDay - st.startDay,st.numDaysStake);
-        if (servedNumOfDays < st.numDaysStake){
-            uint256 avsTokensToReturn = _getAlgoVestEarningsPenalty(st.stakedAVS, servedNumOfDays);
+        if (isWhitelisted(sender)) {
+            uint256 avsTokensToReturn = _getAlgoVestEarnings(st.stakedAVS, servedNumOfDays);
             require(
                 st.freezedRewardAVSTokens >= avsTokensToReturn - st.stakedAVS,
                 "StakingAVS: Internal error!"
@@ -180,7 +180,7 @@ contract AVS_staking is Ownable , ReentrancyGuard
             emit TokenUnfreezed(sender, st.freezedRewardAVSTokens, currDay);
             allAVSTokens = allAVSTokens.sub(avsTokensToReturn - st.stakedAVS);
             avsAddress.transfer(sender, avsTokensToReturn);
-            emit AVSTokenOutcome(sender, avsTokensToReturn - st.stakedAVS, currDay);
+            emit AVSTokenOutcome(sender, avsTokensToReturn, currDay);
             emit StakeEnd(
                 sender,
                 st.stakeId,
@@ -188,47 +188,68 @@ contract AVS_staking is Ownable , ReentrancyGuard
                 servedNumOfDays,
                 currDay
             );
+            totalStakedAVS = totalStakedAVS.sub(st.stakedAVS);
             _removeStake(stakeIndex, stakeId);
             if (stakeList[sender].length == 0){
                 --totalStakers;
             }
-            totalStakedAVS = totalStakedAVS.sub(st.stakedAVS);
         }
         else {
-            uint256 avsTokensToReturn = _getAlgoVestEarnings(st.stakedAVS, st.numDaysStake);
-            require(
-                st.freezedRewardAVSTokens >= avsTokensToReturn - st.stakedAVS,
-                "StakingAVS: Internal error!"
-            );
-            uint256 remainingAVSTokens = st.freezedRewardAVSTokens.sub(avsTokensToReturn - st.stakedAVS);
-            unfreezedAVSTokens = unfreezedAVSTokens.add(remainingAVSTokens);
-            freezedAVSTokens = freezedAVSTokens.sub(st.freezedRewardAVSTokens);
-            emit TokenUnfreezed(sender, st.freezedRewardAVSTokens, currDay);
-            allAVSTokens = allAVSTokens.sub(avsTokensToReturn - st.stakedAVS);
-            //avsAddress.transfer(sender, avsTokensToReturn);
-            if (isWhitelisted(sender)) {
+            if (servedNumOfDays < st.numDaysStake){
+                uint256 avsTokensToReturn = _getAlgoVestEarningsPenalty(st.stakedAVS, servedNumOfDays);
+                require(
+                    st.freezedRewardAVSTokens >= avsTokensToReturn - st.stakedAVS,
+                    "StakingAVS: Internal error!"
+                );
+                uint256 remainingAVSTokens = st.freezedRewardAVSTokens.sub(avsTokensToReturn - st.stakedAVS);
+                unfreezedAVSTokens = unfreezedAVSTokens.add(remainingAVSTokens);
+                freezedAVSTokens = freezedAVSTokens.sub(st.freezedRewardAVSTokens);
+                emit TokenUnfreezed(sender, st.freezedRewardAVSTokens, currDay);
+                allAVSTokens = allAVSTokens.sub(avsTokensToReturn - st.stakedAVS);
                 avsAddress.transfer(sender, avsTokensToReturn);
-                emit AVSTokenOutcome(sender, avsTokensToReturn, currDay);
+                emit AVSTokenOutcome(sender, avsTokensToReturn - st.stakedAVS, currDay);
+                emit StakeEnd(
+                    sender,
+                    st.stakeId,
+                    avsTokensToReturn - st.stakedAVS,
+                    servedNumOfDays,
+                    currDay
+                );
+                totalStakedAVS = totalStakedAVS.sub(st.stakedAVS);
+                _removeStake(stakeIndex, stakeId);
+                if (stakeList[sender].length == 0){
+                    --totalStakers;
+                }
+                //totalStakedAVS = totalStakedAVS.sub(st.stakedAVS);
             }
             else {
+                uint256 avsTokensToReturn = _getAlgoVestEarnings(st.stakedAVS, st.numDaysStake);
+                require(
+                    st.freezedRewardAVSTokens >= avsTokensToReturn - st.stakedAVS,
+                    "StakingAVS: Internal error!"
+                );
+                uint256 remainingAVSTokens = st.freezedRewardAVSTokens.sub(avsTokensToReturn - st.stakedAVS);
+                unfreezedAVSTokens = unfreezedAVSTokens.add(remainingAVSTokens);
+                freezedAVSTokens = freezedAVSTokens.sub(st.freezedRewardAVSTokens);
+                emit TokenUnfreezed(sender, st.freezedRewardAVSTokens, currDay);
+                allAVSTokens = allAVSTokens.sub(avsTokensToReturn - st.stakedAVS);
                 avsAddress.transfer(sender, st.stakedAVS.add((avsTokensToReturn.sub(st.stakedAVS)).mul(98).div(100)));
                 emit AVSTokenOutcome(sender, (avsTokensToReturn.sub(st.stakedAVS)).mul(98).div(100), currDay);
-            }
-            //avsAddress.transfer(sender, st.stakedAVS.add((avsTokensToReturn.sub(st.stakedAVS)).mul(98).div(100)));
-            //emit AVSTokenOutcome(sender, (avsTokensToReturn.sub(st.stakedAVS)).mul(98).div(100), currDay);
 
-            emit StakeEnd(
-                sender,
-                st.stakeId,
-                avsTokensToReturn - st.stakedAVS,
-                servedNumOfDays,
-                currDay
-            );
-            _removeStake(stakeIndex, stakeId);
-            if (stakeList[sender].length == 0){
-                --totalStakers;
+                emit StakeEnd(
+                    sender,
+                    st.stakeId,
+                    avsTokensToReturn - st.stakedAVS,
+                    servedNumOfDays,
+                    currDay
+                );
+                totalStakedAVS = totalStakedAVS.sub(st.stakedAVS);
+                _removeStake(stakeIndex, stakeId);
+                if (stakeList[sender].length == 0){
+                    --totalStakers;
+                }
+                //totalStakedAVS = totalStakedAVS.sub(st.stakedAVS);
             }
-            totalStakedAVS = totalStakedAVS.sub(st.stakedAVS);
         }
     }
     function stakeListCount(address who) external view returns(uint256)
