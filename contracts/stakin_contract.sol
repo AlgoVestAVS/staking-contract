@@ -24,7 +24,7 @@ contract AVS_staking is Ownable , ReentrancyGuard
     StakeInfo[] public allStakes;
 
     mapping(address => StakeInfo[]) public stakeList;
-    mapping(address => bool) whitelist;
+    mapping(address => bool) public whitelist;
 
     struct StakeInfo
     {
@@ -355,13 +355,8 @@ contract AVS_staking is Ownable , ReentrancyGuard
         return _getAlgoVestEarnings(stakeList[who][stakeIndex].stakedAVS, servedDays);
     }
 
-    function getDayUnixTime(uint256 day) public view returns(uint256)
-    {
-        return zeroDayStartTime.add(day.mul(dayDurationSec));
-    }
-
     function addInWhitelist(address _address) 
-    public 
+    external 
     onlyOwner 
     {
         whitelist[_address] = true;
@@ -369,11 +364,16 @@ contract AVS_staking is Ownable , ReentrancyGuard
     }
 
     function removeFromWhiteList(address _address) 
-    public 
+    external 
     onlyOwner 
     {
         whitelist[_address] = false;
         emit RemovedFromWhitelist(_address);
+    }
+
+    function getDayUnixTime(uint256 day) public view returns(uint256)
+    {
+        return zeroDayStartTime.add(day.mul(dayDurationSec));
     }
 
     function isWhitelisted(address _address) 
