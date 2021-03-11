@@ -114,6 +114,10 @@ contract AVS_staking is Ownable , ReentrancyGuard
             numDaysStake > 0 && numDaysStake <= MAX_NUM_DAYS && numDaysStake%15 == 0,
             "StakingAVS: Wrong number of days"
         );
+        require(
+            amount > 0,
+            "StakingAVS: Amount must be more then zero"
+        );
         address sender = _msgSender();
         require(
             avsAddress.transferFrom(sender, address(this), amount),
